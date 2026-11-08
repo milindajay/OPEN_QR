@@ -155,8 +155,21 @@ export function LogoUploader({
             </Button>
           </div>
 
-          {/* Contextual Error Correction Recommendation */}
-          {errorCorrection !== "H" && (
+          {/* Contextual Error Correction Recommendation & Explanation */}
+          {errorCorrection === "H" ? (
+            <div
+              className="flex items-start gap-2 rounded-md border border-border/70 bg-muted/40 p-2.5 text-xs text-muted-foreground"
+              data-testid="logo-ec-active-info"
+            >
+              <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <span>
+                Error correction is set to <strong>H (High)</strong> (~30%
+                theoretical codeword recovery, not 30% safe logo coverage).
+                Higher error correction helps recover obscured center modules,
+                but always test with real cameras.
+              </span>
+            </div>
+          ) : (
             <div
               className="flex items-center justify-between gap-2 rounded-md border border-warning/30 bg-warning/10 p-2.5 text-xs"
               data-testid="logo-ec-recommendation"
@@ -164,8 +177,9 @@ export function LogoUploader({
               <div className="flex items-start gap-2 text-warning">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>
-                  Error correction is <strong>{errorCorrection}</strong>. Consider{" "}
-                  <strong>H (High)</strong> when using a logo.
+                  Error correction is <strong>{errorCorrection}</strong>. Higher
+                  error correction (<strong>H</strong>) can improve recovery when
+                  parts of a QR code are obscured by a logo.
                 </span>
               </div>
               <Button

@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { QrCode, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
+import { BrandLogo } from "@/components/shared/brand-logo";
 import { APP_CONFIG } from "@/lib/constants/app-config";
 
 export function Footer() {
@@ -10,12 +11,10 @@ export function Footer() {
           <div className="space-y-3 md:col-span-2">
             <Link
               href="/"
-              className="flex items-center gap-2 text-base font-semibold text-foreground"
+              aria-label={`${APP_CONFIG.name} Home`}
+              className="inline-flex items-center text-base font-semibold text-foreground"
             >
-              <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                <QrCode className="h-4 w-4" />
-              </span>
-              <span>{APP_CONFIG.name}</span>
+              <BrandLogo markSize={28} />
             </Link>
             <p className="max-w-md text-sm text-muted-foreground">
               {APP_CONFIG.description}

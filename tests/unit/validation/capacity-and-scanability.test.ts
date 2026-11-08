@@ -219,6 +219,267 @@ describe("Advisory Scanability Analyzer", () => {
     expect(report.issues.some((i) => i.id === "logo-too-large")).toBe(true);
     expect(report.issues.some((i) => i.id === "logo-low-ec")).toBe(true);
   });
+
+  it("evaluates boundary values around 4.5:1, multi-stop gradients, and foreground+background gradients without averaging", () => {
+    const base = createDefaultDesign();
+
+    // Just above 4.5:1 (#767676 on #FFFFFF = 4.54:1) -> good
+    const passBoundary = analyzeScanability("https://openqr.studio", {
+      ...base,
+      dots: { style: "square", color: "#767676" },
+      corners: {
+        outerStyle: "square",
+        innerStyle: "square",
+        outerColor: "#171717",
+        innerColor: "#171717",
+      },
+    });
+    expect(passBoundary.contrastRatio).toBeGreaterThanOrEqual(4.5);
+    expect(passBoundary.status).toBe("good");
+
+    // Just below 4.5:1 (#777777 on #FFFFFF = 4.48:1) -> warning (never unconditional good)
+    const failBoundary = analyzeScanability("https://openqr.studio", {
+      ...base,
+      dots: { style: "square", color: "#777777" },
+    });
+    expect(failBoundary.contrastRatio).toBeLessThan(4.5);
+    expect(failBoundary.status).toBe("warning");
+    expect(
+      failBoundary.issues.some((i) => i.id === "low-contrast-warning")
+    ).toBe(true);
+
+    // Gradient with one strong stop (#000000, 21:1) and one weak stop (#888888, 3.54:1).
+    // Averaging stops (#444444) would falsely yield 9.74:1 ("good"), whereas worst-stop evaluation yields 3.54:1 ("warning").
+    const oneStrongOneWeak = analyzeScanability("https://openqr.studio", {
+      ...base,
+      dots: {
+        style: "rounded",
+        color: "#000000",
+        gradient: {
+          type: "linear",
+          rotation: 0,
+          colors: [
+            { offset: 0, color: "#000000" },
+            { offset: 1, color: "#888888" },
+          ],
+        },
+      },
+    });
+    expect(oneStrongOneWeak.contrastRatio).toBe(3.54);
+    expect(oneStrongOneWeak.status).toBe("warning");
+
+    // Multi-stop gradient (3 stops) + background gradient -> worst foreground/background stop pair
+    const multiStopFgAndBg = analyzeScanability("https://openqr.studio", {
+      ...base,
+      dots: {
+        style: "dots",
+        color: "#0F172A",
+        gradient: {
+          type: "linear",
+          rotation: 45,
+          colors: [
+            { offset: 0, color: "#0F172A" },
+            { offset: 0.5, color: "#334155" },
+            { offset: 1, color: "#64748B" },
+          ],
+        },
+      },
+      background: {
+        color: "#FFFFFF",
+        transparent: false,
+        gradient: {
+          type: "linear",
+          rotation: 90,
+          colors: [
+            { offset: 0, color: "#FFFFFF" },
+            { offset: 1, color: "#E2E8F0" },
+          ],
+        },
+      },
+    });
+    // Worst stop pair is #64748B against #E2E8F0 (< 4.5:1)
+    expect(multiStopFgAndBg.contrastRatio).toBeLessThan(4.5);
+    expect(multiStopFgAndBg.status).not.toBe("good");
+  });
+
+  it("accounts for logo scale, EC level, QR version density, clearance padding, and backing plate", () => {
+    const base = createDefaultDesign();
+    const logoSrc = "data:image/png;base64,iVBORw0KGgo=";
+
+    // 1. Small logo (18%) with EC H and 4px margin -> good
+    const safeLogoReport = analyzeScanability("https://openqr.studio", {
+      ...base,
+      errorCorrection: "H",
+      logo: {
+        source: logoSrc,
+        size: 0.18,
+        margin: 4,
+        shape: "square",
+      },
+    });
+    expect(safeLogoReport.status).toBe("good");
+
+    // 2. Logo with 0px clearance and no backing plate -> logo-clearance-warning
+    const zeroClearanceNoPlate = analyzeScanability("https://openqr.studio", {
+      ...base,
+      errorCorrection: "H",
+      logo: {
+        source: logoSrc,
+        size: 0.2,
+        margin: 0,
+        shape: "square",
+      },
+    });
+    expect(zeroClearanceNoPlate.status).toBe("warning");
+    expect(
+      zeroClearanceNoPlate.issues.some((i) => i.id === "logo-clearance-warning")
+    ).toBe(true);
+
+    // 3. Adding a solid backing plate resolves the 0px clearance warning
+    const zeroClearanceWithPlate = analyzeScanability("https://openqr.studio", {
+      ...base,
+      errorCorrection: "H",
+      logo: {
+        source: logoSrc,
+        size: 0.2,
+        margin: 0,
+        shape: "rounded",
+        backgroundColor: "#FFFFFF",
+      },
+    });
+    expect(
+      zeroClearanceWithPlate.issues.some(
+        (i) => i.id === "logo-clearance-warning"
+      )
+    ).toBe(false);
+    expect(zeroClearanceWithPlate.status).toBe("good");
+
+    // 4. Compact grid (Version <= 2) with 22% logo and EC = Q -> logo-version-density-warning
+    const compactQReport = analyzeScanability("https://a.co", {
+      ...base,
+      errorCorrection: "Q",
+      logo: {
+        source: logoSrc,
+        size: 0.22,
+        margin: 4,
+        shape: "square",
+      },
+    });
+    expect(compactQReport.status).toBe("warning");
+    expect(
+      compactQReport.issues.some((i) => i.id === "logo-version-density-warning")
+    ).toBe(true);
+
+    // 5. Exact boundary checks for all LOGO_SCANABILITY_THRESHOLDS
+    // 5a. WARNING_LINEAR_SCALE (0.24 vs 0.25 at EC H)
+    const atWarningBoundary = analyzeScanability("https://openqr.studio", {
+      ...base,
+      errorCorrection: "H",
+      logo: { source: logoSrc, size: 0.24, margin: 4, shape: "square" },
+    });
+    expect(atWarningBoundary.status).toBe("good");
+    expect(
+      atWarningBoundary.issues.some((i) => i.id === "logo-size-warning")
+    ).toBe(false);
+
+    const aboveWarningBoundary = analyzeScanability("https://openqr.studio", {
+      ...base,
+      errorCorrection: "H",
+      logo: { source: logoSrc, size: 0.25, margin: 4, shape: "square" },
+    });
+    expect(aboveWarningBoundary.status).toBe("warning");
+    expect(
+      aboveWarningBoundary.issues.some((i) => i.id === "logo-size-warning")
+    ).toBe(true);
+
+    // 5b. CRITICAL_LINEAR_SCALE (0.30 vs 0.31 at EC H)
+    const atCriticalBoundary = analyzeScanability("https://openqr.studio", {
+      ...base,
+      errorCorrection: "H",
+      logo: { source: logoSrc, size: 0.3, margin: 4, shape: "square" },
+    });
+    expect(atCriticalBoundary.status).toBe("warning");
+    expect(
+      atCriticalBoundary.issues.some((i) => i.id === "logo-too-large")
+    ).toBe(false);
+
+    const aboveCriticalBoundary = analyzeScanability("https://openqr.studio", {
+      ...base,
+      errorCorrection: "H",
+      logo: { source: logoSrc, size: 0.31, margin: 4, shape: "square" },
+    });
+    expect(aboveCriticalBoundary.status).toBe("high-risk");
+    expect(
+      aboveCriticalBoundary.issues.some((i) => i.id === "logo-too-large")
+    ).toBe(true);
+
+    // 5c. LOW_EC_HIGH_RISK_SCALE (0.22 vs 0.23 at EC L)
+    const atLowEcBoundary = analyzeScanability("https://openqr.studio", {
+      ...base,
+      errorCorrection: "L",
+      logo: { source: logoSrc, size: 0.22, margin: 4, shape: "square" },
+    });
+    expect(atLowEcBoundary.status).toBe("warning");
+    expect(
+      atLowEcBoundary.issues.some((i) => i.id === "logo-too-large")
+    ).toBe(false);
+    expect(atLowEcBoundary.issues.some((i) => i.id === "logo-low-ec")).toBe(
+      true
+    );
+
+    const aboveLowEcBoundary = analyzeScanability("https://openqr.studio", {
+      ...base,
+      errorCorrection: "L",
+      logo: { source: logoSrc, size: 0.23, margin: 4, shape: "square" },
+    });
+    expect(aboveLowEcBoundary.status).toBe("high-risk");
+    expect(
+      aboveLowEcBoundary.issues.some((i) => i.id === "logo-too-large")
+    ).toBe(true);
+
+    // 5d. DENSE_OR_COMPACT_VERSION_SCALE (0.20 vs 0.21 on compact Version <= 2 and dense Version >= 20 with EC Q)
+    const atCompactVersionBoundary = analyzeScanability("https://a.co", {
+      ...base,
+      errorCorrection: "Q",
+      logo: { source: logoSrc, size: 0.2, margin: 4, shape: "square" },
+    });
+    expect(
+      atCompactVersionBoundary.issues.some(
+        (i) => i.id === "logo-version-density-warning"
+      )
+    ).toBe(false);
+
+    const densePayload = "https://openqr.studio/".padEnd(550, "x");
+    const denseVersionAboveBoundary = analyzeScanability(densePayload, {
+      ...base,
+      errorCorrection: "Q",
+      logo: { source: logoSrc, size: 0.21, margin: 4, shape: "square" },
+    });
+    expect(
+      denseVersionAboveBoundary.issues.some(
+        (i) => i.id === "logo-version-density-warning"
+      )
+    ).toBe(true);
+
+    // 5e. MIN_RECOMMENDED_CLEARANCE_PX (margin 1 vs margin 2 without backing plate)
+    const marginOneNoPlate = analyzeScanability("https://openqr.studio", {
+      ...base,
+      errorCorrection: "H",
+      logo: { source: logoSrc, size: 0.2, margin: 1, shape: "square" },
+    });
+    expect(
+      marginOneNoPlate.issues.some((i) => i.id === "logo-clearance-warning")
+    ).toBe(true);
+
+    const marginTwoNoPlate = analyzeScanability("https://openqr.studio", {
+      ...base,
+      errorCorrection: "H",
+      logo: { source: logoSrc, size: 0.2, margin: 2, shape: "square" },
+    });
+    expect(
+      marginTwoNoPlate.issues.some((i) => i.id === "logo-clearance-warning")
+    ).toBe(false);
+  });
 });
 
 describe("Privacy-Preserving Export Filenames", () => {

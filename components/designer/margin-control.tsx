@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/primitives";
 import { SectionHeading } from "@/components/shared/section-heading";
 import { TooltipInfo } from "@/components/shared/tooltip-info";
+import { EXPORT_RESOLUTION_PRESET_DETAILS } from "@/types/export";
 import { cn } from "@/lib/utils/cn";
 
 export interface MarginControlProps {
@@ -16,8 +17,6 @@ export interface MarginControlProps {
   onDimensionsChange: (size: number) => void;
   onReset: () => void;
 }
-
-const DIMENSION_PRESETS = [256, 512, 1024, 2048] as const;
 
 export function MarginControl({
   margin,
@@ -105,25 +104,26 @@ export function MarginControl({
             id="export-dimension-slider"
             aria-label="Export resolution in pixels"
             min={256}
-            max={2048}
+            max={4096}
             step={64}
             value={[width]}
             onValueChange={(vals) => onDimensionsChange(vals[0] ?? 1024)}
           />
 
           <div
-            className="grid grid-cols-4 gap-1.5 pt-1"
+            className="grid grid-cols-5 gap-1.5 pt-1"
             role="group"
             aria-label="Export resolution presets"
           >
-            {DIMENSION_PRESETS.map((size) => {
-              const isSelected = width === size;
+            {EXPORT_RESOLUTION_PRESET_DETAILS.map((preset) => {
+              const isSelected = width === preset.size;
               return (
                 <button
-                  key={size}
+                  key={preset.size}
                   type="button"
-                  onClick={() => onDimensionsChange(size)}
-                  data-testid={`dimension-preset-${size}`}
+                  onClick={() => onDimensionsChange(preset.size)}
+                  title={`${preset.name} (${preset.size}×${preset.size} px) — ${preset.intendedUse}`}
+                  data-testid={`dimension-preset-${preset.size}`}
                   className={cn(
                     "min-h-9 rounded-md border py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     isSelected
@@ -131,7 +131,7 @@ export function MarginControl({
                       : "border-border bg-background text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {size}px
+                  {preset.shortLabel}
                 </button>
               );
             })}

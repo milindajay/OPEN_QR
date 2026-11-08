@@ -1,6 +1,6 @@
 {
   "name": "openqr-studio",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Free, open-source, privacy-first QR code generator and design studio.",
   "license": "MIT",

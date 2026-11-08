@@ -15,6 +15,7 @@ import type { QRDesign } from "@/types/design";
 import {
   DEFAULT_JPEG_QUALITY,
   EXPORT_DIMENSION_PRESETS,
+  EXPORT_RESOLUTION_PRESET_DETAILS,
   MAX_EXPORT_DIMENSION,
   MIN_EXPORT_DIMENSION,
   type ExportFormat,
@@ -253,20 +254,21 @@ export function QRDownloadPanel({
             </div>
 
             <div
-              className="grid grid-cols-5 gap-1.5"
+              className="grid grid-cols-3 sm:grid-cols-6 gap-1.5"
               role="group"
               aria-label="Export resolution options"
             >
-              {EXPORT_DIMENSION_PRESETS.map((size) => {
+              {EXPORT_RESOLUTION_PRESET_DETAILS.map((preset) => {
                 const isSelected =
-                  !isCustomSizeMode && activeDimension === size;
+                  !isCustomSizeMode && activeDimension === preset.size;
                 return (
                   <button
-                    key={size}
+                    key={preset.size}
                     type="button"
                     disabled={controlsDisabled}
-                    onClick={() => handlePresetDimensionSelect(size)}
-                    data-testid={`export-size-${size}`}
+                    onClick={() => handlePresetDimensionSelect(preset.size)}
+                    title={`${preset.name} (${preset.size}×${preset.size} px) — ${preset.intendedUse}`}
+                    data-testid={`export-size-${preset.size}`}
                     className={cn(
                       "min-h-8 rounded-md border px-1.5 py-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
                       isSelected
@@ -274,7 +276,7 @@ export function QRDownloadPanel({
                         : "border-border bg-background text-muted-foreground hover:text-foreground"
                     )}
                   >
-                    {size}
+                    {preset.size}
                   </button>
                 );
               })}
@@ -294,6 +296,23 @@ export function QRDownloadPanel({
                 Custom
               </button>
             </div>
+
+            <p
+              className="text-[11px] leading-relaxed text-muted-foreground"
+              data-testid="export-dpi-guidance"
+            >
+              {(() => {
+                const matchedPreset = EXPORT_RESOLUTION_PRESET_DETAILS.find(
+                  (p) => !isCustomSizeMode && p.size === activeDimension
+                );
+                const approxInches = Number(
+                  (activeDimension / 300).toFixed(2)
+                );
+                return matchedPreset
+                  ? `${matchedPreset.name}: ${matchedPreset.intendedUse}. At 300 DPI, ${activeDimension} px ≈ ${approxInches} in (pixel dimensions alone do not set physical print DPI).`
+                  : `Custom size: at 300 DPI, ${activeDimension} px ≈ ${approxInches} in (pixel dimensions alone do not set physical print DPI).`;
+              })()}
+            </p>
 
             {isCustomSizeMode && (
               <div className="flex items-center justify-between gap-2 pt-1">

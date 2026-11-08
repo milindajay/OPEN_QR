@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { QrCode, Github } from "lucide-react";
+import { Github } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/shared/brand-logo";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { MobileNavigation } from "@/components/layout/mobile-navigation";
 import { APP_CONFIG } from "@/lib/constants/app-config";
@@ -26,12 +27,10 @@ export function Header() {
         <div className="flex items-center gap-8">
           <Link
             href="/"
-            className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-lg font-semibold tracking-tight text-foreground"
+            aria-label={`${APP_CONFIG.name} Home`}
+            className="flex shrink-0 items-center text-lg font-semibold tracking-tight text-foreground"
           >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <QrCode className="h-5 w-5" />
-            </span>
-            <span>{APP_CONFIG.name}</span>
+            <BrandLogo markSize={32} />
           </Link>
 
           <nav

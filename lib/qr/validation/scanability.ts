@@ -1,21 +1,59 @@
-import type { QRDesign } from "@/types/design";
+import type { GradientConfig, QRDesign } from "@/types/design";
 import type { ScanabilityIssue, ScanabilityLevel, ScanabilityReport } from "@/types/qr";
-import { estimateQrCapacity } from "@/lib/qr/validation/qr-capacity";
+import {
+  estimateQrCapacity,
+  getModulesPerSide,
+} from "@/lib/qr/validation/qr-capacity";
 import {
   getContrastRatio,
   getRelativeLuminance,
   parseColorToRgb,
 } from "@/lib/utils/color-utils";
 
+/**
+ * Advisory thresholds for evaluating center-logo scanability risk.
+ */
+export const LOGO_SCANABILITY_THRESHOLDS = {
+  /** Linear logo scale above which a high-risk warning is emitted (> 30% linear / > 9.0% area). */
+  CRITICAL_LINEAR_SCALE: 0.3,
+  /** Linear logo scale above which a size warning is emitted (> 24% linear / > 5.76% area). */
+  WARNING_LINEAR_SCALE: 0.24,
+  /** Linear logo scale above which low EC (L) becomes high-risk (> 22% linear / > 4.84% area). */
+  LOW_EC_HIGH_RISK_SCALE: 0.22,
+  /** Linear logo scale above which compact (Version <= 2) or dense (Version >= 20) grids warrant caution when EC !== H. */
+  DENSE_OR_COMPACT_VERSION_SCALE: 0.2,
+  /** Minimum recommended clearance padding (px) when no logo backing plate is enabled. */
+  MIN_RECOMMENDED_CLEARANCE_PX: 2,
+} as const;
+
 interface ContrastEvaluation {
   minRatio: number;
   isInverted: boolean;
+}
+
+function extractColorStops(
+  fallbackColor: string,
+  gradient?: GradientConfig
+): string[] {
+  if (gradient && Array.isArray(gradient.colors) && gradient.colors.length > 0) {
+    const validStops = gradient.colors
+      .map((stop) => (typeof stop?.color === "string" ? stop.color.trim() : ""))
+      .filter((color) => color.length > 0);
+    if (validStops.length > 0) {
+      return validStops;
+    }
+  }
+  return [fallbackColor];
 }
 
 function evaluateForegroundAgainstBackground(
   foregroundColors: readonly string[],
   backgroundColors: readonly string[]
 ): ContrastEvaluation {
+  if (foregroundColors.length === 0 || backgroundColors.length === 0) {
+    return { minRatio: 1, isInverted: false };
+  }
+
   let minRatio = 21;
   let isInverted = false;
 
@@ -94,15 +132,17 @@ export function analyzeScanability(
   }
 
   // 3. Foreground Module & Finder Pattern Contrast + Color Inversion
-  const moduleColors = design.dots.gradient?.colors.length
-    ? design.dots.gradient.colors.map((c) => c.color)
-    : [design.dots.color];
+  const moduleColors = extractColorStops(
+    design.dots.color,
+    design.dots.gradient
+  );
 
   const bgColors = design.background.transparent
     ? ["#FFFFFF"]
-    : design.background.gradient?.colors.length
-      ? design.background.gradient.colors.map((c) => c.color)
-      : [design.background.color];
+    : extractColorStops(
+        design.background.color,
+        design.background.gradient
+      );
 
   const moduleEval = evaluateForegroundAgainstBackground(moduleColors, bgColors);
   const outerFinderEval = evaluateForegroundAgainstBackground(
@@ -191,21 +231,35 @@ export function analyzeScanability(
 
   // 4. Error Correction & Logo Considerations
   if (design.logo?.source) {
-    if (design.logo.size > 0.3) {
+    const logoScale = design.logo.size;
+    const estimatedAreaPct = Number((logoScale * logoScale * 100).toFixed(1));
+    const modulesPerSide = getModulesPerSide(capacity.estimatedVersion);
+    const occludedModulesPerSide = Math.max(
+      1,
+      Math.round(modulesPerSide * logoScale)
+    );
+    const hasBackingPlate = Boolean(
+      design.logo.backgroundColor &&
+        design.logo.backgroundColor !== "transparent"
+    );
+
+    if (
+      logoScale > LOGO_SCANABILITY_THRESHOLDS.CRITICAL_LINEAR_SCALE ||
+      (logoScale > LOGO_SCANABILITY_THRESHOLDS.LOW_EC_HIGH_RISK_SCALE &&
+        design.errorCorrection === "L")
+    ) {
       issues.push({
         id: "logo-too-large",
         level: "high-risk",
         title: "Logo obscures too many data modules",
-        description:
-          "Logo size exceeds 30% of the QR area, which can exceed Reed-Solomon error correction recovery limits.",
+        description: `Logo linear scale (${Math.round(logoScale * 100)}%, ~${estimatedAreaPct}% area coverage, ~${occludedModulesPerSide}×${occludedModulesPerSide} modules on Version ${capacity.estimatedVersion}) with error correction ${design.errorCorrection} can exceed Reed-Solomon recovery limits.`,
       });
-    } else if (design.logo.size > 0.24) {
+    } else if (logoScale > LOGO_SCANABILITY_THRESHOLDS.WARNING_LINEAR_SCALE) {
       issues.push({
         id: "logo-size-warning",
         level: "warning",
         title: "Large center logo",
-        description:
-          "Keep logo size at or below 24% and test with multiple scanning apps.",
+        description: `Logo scale is ${Math.round(logoScale * 100)}% (~${estimatedAreaPct}% area coverage on Version ${capacity.estimatedVersion}). Keep logo size at or below 24% and test with multiple scanning apps.`,
       });
     }
 
@@ -214,7 +268,31 @@ export function analyzeScanability(
         id: "logo-low-ec",
         level: "warning",
         title: "Higher error correction recommended with logo",
-        description: `Error correction is set to ${design.errorCorrection}. Level H (or Q) is strongly recommended when embedding a center logo.`,
+        description: `Error correction is set to ${design.errorCorrection}. Level H (~30% theoretical codeword recovery) or Q (~25% codeword recovery) is strongly recommended when a center logo obscures data modules.`,
+      });
+    } else if (
+      design.errorCorrection === "Q" &&
+      (capacity.estimatedVersion <= 2 || capacity.estimatedVersion >= 20) &&
+      logoScale > LOGO_SCANABILITY_THRESHOLDS.DENSE_OR_COMPACT_VERSION_SCALE
+    ) {
+      issues.push({
+        id: "logo-version-density-warning",
+        level: "warning",
+        title: "Logo on compact or high-density QR grid",
+        description: `QR Version ${capacity.estimatedVersion} (${modulesPerSide}×${modulesPerSide} modules) with a ${Math.round(logoScale * 100)}% logo and error correction Q reduces recovery margin. Consider level H or a smaller logo scale.`,
+      });
+    }
+
+    if (
+      design.logo.margin <
+        LOGO_SCANABILITY_THRESHOLDS.MIN_RECOMMENDED_CLEARANCE_PX &&
+      !hasBackingPlate
+    ) {
+      issues.push({
+        id: "logo-clearance-warning",
+        level: "warning",
+        title: "Low logo clearance without backing plate",
+        description: `Logo clearance padding is ${design.logo.margin} px with no backing plate. Add at least 2 px clearance padding or enable a backing plate so adjacent QR modules do not visually blend into the logo.`,
       });
     }
   } else if (design.errorCorrection === "L" && capacity.estimatedVersion <= 15) {

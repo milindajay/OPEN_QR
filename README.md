@@ -5,6 +5,7 @@
 OpenQR Studio is a free, open-source, browser-based static QR code generator and design studio built with Next.js 15, React 19, TypeScript, and Tailwind CSS v4.
 
 - **Official Repository:** [https://github.com/milindajay/OPEN_QR](https://github.com/milindajay/OPEN_QR)
+- **Version:** `1.1.0`
 - **License:** [MIT License](./LICENSE)
 
 ---
@@ -35,10 +36,13 @@ OpenQR Studio is a free, open-source, browser-based static QR code generator and
   - Real-time advisory scanability analysis (WCAG relative luminance contrast ratio, quiet-zone check, logo coverage, and UTF-8 byte capacity)
 
 - **Production Export Engine:**
-  - **PNG:** 32-bit RGBA raster export with transparent or solid background (`256px`–`2048px` presets or custom `128px`–`4096px`)
-  - **JPEG:** Raster export with selectable quality (`80%`, `92%`, `100%`) and automatic `#FFFFFF` background compositing for transparent designs
-  - **SVG:** Standalone XML 1.0 vector export with explicit `xmlns`, `width`, `height`, `viewBox`, unique gradient/clipPath IDs, and embedded base64 data-URI logos
+  - **PNG:** 32-bit RGBA raster export with transparent or solid background (`256px` Compact, `512px` Web/Screen, `1024px` Web/High Resolution, `2048px` Print/Standard `~6.83 in @ 300 DPI`, `4096px` Print/Large Signage `~13.65 in @ 300 DPI`, or custom `128px`–`4096px`)
+  - **JPEG:** Raster export with selectable quality (`80%`, `92%`, `100%`) and automatic `#FFFFFF` (or custom colour) background compositing for transparent designs
+  - **SVG:** Standalone XML 1.0 vector export with explicit `xmlns`, `width`, `height`, `viewBox`, unique gradient/clipPath IDs, and self-contained base64 data-URI logos (`PNG`, `JPEG`, `WebP`, `SVG`)
   - **Clipboard:** One-click `Copy QR Image` (with automatic PNG download fallback) and `Copy Payload`
+
+- **Brand Identity & Icon Suite (`v1.1.0`):**
+  - Custom geometric QR brand mark and wordmark in `public/logo/` (`logo.svg`, `icon.svg`, `logo-light.svg`, `logo-dark.svg`, `logo-mono.svg`) and multi-resolution favicons/app icons in `public/` (`favicon.ico`, `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`).
 
 - **Client-Side Architecture:**
   - QR payload generation, input validation, SVG sanitization, and PNG/JPEG/SVG exports run client-side in your browser without requiring user accounts or a backend database.

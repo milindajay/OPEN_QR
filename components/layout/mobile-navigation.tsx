@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, Github } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/shared/brand-logo";
 import { APP_CONFIG } from "@/lib/constants/app-config";
 import { cn } from "@/lib/utils/cn";
 
@@ -34,6 +35,12 @@ export function MobileNavigation() {
 
       {open && (
         <div className="absolute left-0 right-0 top-16 z-50 border-b border-border bg-background p-4 shadow-lg">
+          <div className="mb-3 flex items-center justify-between border-b border-border/70 pb-3">
+            <BrandLogo markSize={24} className="text-sm" />
+            <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              v{APP_CONFIG.version}
+            </span>
+          </div>
           <nav className="flex flex-col space-y-1.5" aria-label="Mobile navigation">
             {NAV_LINKS.map((link) => {
               const isActive =

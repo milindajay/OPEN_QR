@@ -861,9 +861,13 @@ export default function DocumentationPage() {
                 <strong className="text-foreground">
                   Error Correction Recommendation:
                 </strong>{" "}
-                Because a center logo covers underlying data modules, always set{" "}
-                <strong>Error Correction Level to H (~30%)</strong> or{" "}
-                <strong>Q (~25%)</strong> in the Setup tab when embedding a logo.
+                When you first upload a logo, OpenQR Studio automatically selects{" "}
+                <strong>Error Correction Level H</strong> (~30% theoretical
+                codeword recovery capacity, not 30% safe logo coverage) unless you
+                have already manually chosen an error correction level. Higher
+                error correction improves recovery when center modules are
+                obscured, though physical scanning should always be verified with
+                real cameras.
               </div>
             </div>
           </section>
@@ -905,10 +909,14 @@ export default function DocumentationPage() {
                 <ul className="mt-3 space-y-2 text-xs leading-relaxed text-muted-foreground">
                   <li>
                     <strong>Preset Dimensions:</strong>{" "}
-                    <code className="font-mono">256 px</code>,{" "}
-                    <code className="font-mono">512 px</code>,{" "}
-                    <code className="font-mono">1024 px</code> (default), and{" "}
-                    <code className="font-mono">2048 px</code>.
+                    <code className="font-mono">256 px</code> (Compact),{" "}
+                    <code className="font-mono">512 px</code> (Web / Screen),{" "}
+                    <code className="font-mono">1024 px</code> (Web / High
+                    Resolution, default),{" "}
+                    <code className="font-mono">2048 px</code> (Print / Standard,{" "}
+                    <code className="font-mono">~6.83 in @ 300 DPI</code>), and{" "}
+                    <code className="font-mono">4096 px</code> (Print / Large
+                    Signage, <code className="font-mono">~13.65 in @ 300 DPI</code>).
                   </li>
                   <li>
                     <strong>Custom Dimensions:</strong> Any square pixel size from{" "}
@@ -935,7 +943,7 @@ export default function DocumentationPage() {
                   <li>
                     <strong>Available Dimensions:</strong> Presets (
                     <code className="font-mono">256</code>–
-                    <code className="font-mono">2048 px</code>) and custom sizes (
+                    <code className="font-mono">4096 px</code>) and custom sizes (
                     <code className="font-mono">128</code>–
                     <code className="font-mono">4096 px</code>).
                   </li>

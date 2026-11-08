@@ -16,6 +16,18 @@ export const metadata: Metadata = {
   },
   description: APP_CONFIG.description,
   applicationName: APP_CONFIG.name,
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "16x16 32x32" },
+      { url: "/logo/icon.svg", type: "image/svg+xml", sizes: "any" },
+      { url: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicon-16x16.png", type: "image/png", sizes: "16x16" },
+    ],
+    shortcut: ["/favicon.ico"],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
   openGraph: {
     title: `${APP_CONFIG.name} — ${APP_CONFIG.tagline}`,
     description: APP_CONFIG.description,

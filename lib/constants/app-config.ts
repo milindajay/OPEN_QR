@@ -5,6 +5,7 @@ const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(
 
 export const APP_CONFIG = {
   name: "OpenQR Studio",
+  version: "1.1.0",
   tagline: "Create Beautiful QR Codes. Completely Free.",
   description:
     "Generate, customize, and export static QR codes for links, contacts, Wi-Fi, calendar events, and more directly in your browser. Free and open source.",

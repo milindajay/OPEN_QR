@@ -9,7 +9,13 @@ import { estimateQrCapacity } from "@/lib/qr/validation/qr-capacity";
 
 interface InternalQRCodeStylingInstance {
   _svgDrawingPromise?: Promise<void>;
+  _canvasDrawingPromise?: Promise<void>;
+  _svg?: SVGElement;
+  _canvas?: HTMLCanvasElement;
+  _container?: HTMLElement;
 }
+
+const activeContainerOwner = new WeakMap<HTMLElement, BrowserQRRenderer>();
 
 async function loadQrCodeStylingConstructor(): Promise<
   typeof QRCodeStylingType
@@ -40,6 +46,7 @@ export class BrowserQRRenderer implements QRRendererAdapter {
     }
     this.isDestroyed = false;
     this.container = container;
+    activeContainerOwner.set(container, this);
     this.container.replaceChildren();
   }
 
@@ -51,7 +58,7 @@ export class BrowserQRRenderer implements QRRendererAdapter {
     const currentSequence = ++this.renderSequence;
 
     if (!encodedPayload || encodedPayload.length === 0) {
-      if (this.container) {
+      if (this.container && activeContainerOwner.get(this.container) === this) {
         this.container.replaceChildren();
       }
       this.instance = null;
@@ -66,7 +73,12 @@ export class BrowserQRRenderer implements QRRendererAdapter {
     }
 
     const QRCodeStyling = await loadQrCodeStylingConstructor();
-    if (this.isDestroyed || currentSequence !== this.renderSequence) {
+    if (
+      this.isDestroyed ||
+      currentSequence !== this.renderSequence ||
+      !this.container ||
+      activeContainerOwner.get(this.container) !== this
+    ) {
       return;
     }
 
@@ -74,21 +86,40 @@ export class BrowserQRRenderer implements QRRendererAdapter {
 
     if (!this.instance) {
       this.instance = new QRCodeStyling(options);
-      if (this.container) {
-        this.container.replaceChildren();
-        this.instance.append(this.container);
-      }
+      this.container.replaceChildren();
+      this.instance.append(this.container);
     } else {
       this.instance.update(options);
-      if (this.container && this.container.childNodes.length === 0) {
+      if (this.container.childNodes.length === 0) {
         this.instance.append(this.container);
       }
     }
 
     const internalInstance =
       this.instance as unknown as InternalQRCodeStylingInstance;
-    if (internalInstance._svgDrawingPromise) {
-      await internalInstance._svgDrawingPromise;
+    const svgPromise = internalInstance._svgDrawingPromise;
+    const canvasPromise = internalInstance._canvasDrawingPromise;
+    if (svgPromise) {
+      await svgPromise;
+    }
+    if (canvasPromise) {
+      await canvasPromise;
+    }
+
+    if (
+      this.isDestroyed ||
+      currentSequence !== this.renderSequence ||
+      !this.container ||
+      activeContainerOwner.get(this.container) !== this
+    ) {
+      return;
+    }
+
+    const activeElement = internalInstance._svg ?? internalInstance._canvas;
+    if (activeElement && this.container.childElementCount > 1) {
+      this.container.replaceChildren(activeElement);
+    } else if (activeElement && this.container.childElementCount === 0) {
+      this.container.appendChild(activeElement);
     }
   }
 
@@ -104,8 +135,14 @@ export class BrowserQRRenderer implements QRRendererAdapter {
   destroy(): void {
     this.isDestroyed = true;
     this.renderSequence++;
-    if (this.container) {
+    if (this.instance) {
+      const internalInstance =
+        this.instance as unknown as InternalQRCodeStylingInstance;
+      internalInstance._container = undefined;
+    }
+    if (this.container && activeContainerOwner.get(this.container) === this) {
       this.container.replaceChildren();
+      activeContainerOwner.delete(this.container);
     }
     this.instance = null;
     this.container = null;

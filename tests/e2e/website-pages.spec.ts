@@ -128,12 +128,18 @@ test.describe("Phase 5 — Website Content, Documentation & Trust Pages", () => 
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await page.goto(vp.route);
       await expect(page.locator("h1")).toBeVisible();
+      await expect(page.getByTestId("brand-logo").first()).toBeVisible();
 
       const hasHorizontalOverflow = await page.evaluate(
         () => document.documentElement.scrollWidth > window.innerWidth
       );
       expect(hasHorizontalOverflow).toBe(false);
     }
+
+    const iconLinkCount = await page
+      .locator('head link[rel*="icon"]')
+      .count();
+    expect(iconLinkCount).toBeGreaterThanOrEqual(3);
 
     // Verify mobile menu navigation on 375px
     await page.setViewportSize({ width: 375, height: 812 });

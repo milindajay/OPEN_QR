@@ -405,7 +405,7 @@ export function inspectSvgContent(svgText: string): SvgInspectionReport {
       }
 
       if (
-        /^(?:https?:|file:|\/\/|javascript:|vbscript:|data:text\/html)/i.test(val) ||
+        /^(?:blob:|https?:|file:|\/\/|javascript:|vbscript:|data:text\/html)/i.test(val) ||
         val.includes("/_next/")
       ) {
         hasExternalReferences = true;

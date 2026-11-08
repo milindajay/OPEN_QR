@@ -359,4 +359,208 @@ describe("useQrGenerator & useQrDesign State Management", () => {
     });
     expect(result.current.encodedPayload).toBe("https://openqr.studio");
   });
+
+  it("auto-selects error correction H when a logo is first added, and respects manual EC selection thereafter", () => {
+    const { result } = renderHook(() => useQrGenerator());
+    const sampleDataUri =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+    // Default EC is M before adding a logo
+    expect(result.current.design.errorCorrection).toBe("M");
+
+    // 1. Adding a logo for the first time without prior manual EC selection -> auto-selects H
+    act(() => {
+      result.current.setLogo({
+        source: sampleDataUri,
+        fileName: "logo1.png",
+        size: 0.22,
+        margin: 4,
+        shape: "square",
+      });
+    });
+    expect(result.current.design.errorCorrection).toBe("H");
+
+    // 2. User manually chooses Q -> choice is respected across subsequent logo updates and replacements
+    act(() => {
+      result.current.setErrorCorrection("Q");
+    });
+    expect(result.current.design.errorCorrection).toBe("Q");
+
+    act(() => {
+      result.current.updateLogo({ size: 0.2 });
+    });
+    expect(result.current.design.errorCorrection).toBe("Q");
+
+    // 3. Direct logo replacement (setLogo while a logo is already active) preserves manual Q
+    act(() => {
+      result.current.setLogo({
+        source: sampleDataUri,
+        fileName: "logo-replaced.png",
+        size: 0.2,
+        margin: 4,
+        shape: "rounded",
+      });
+    });
+    expect(result.current.design.errorCorrection).toBe("Q");
+
+    // 4. Removing and re-adding a logo preserves manual Q
+    act(() => {
+      result.current.removeLogo();
+      result.current.setLogo({
+        source: sampleDataUri,
+        fileName: "logo2.png",
+        size: 0.22,
+        margin: 4,
+        shape: "circle",
+      });
+    });
+    // Because user explicitly chose Q, re-adding a logo does NOT overwrite Q
+    expect(result.current.design.errorCorrection).toBe("Q");
+
+    // 5. After full resetDesign(), hasUserSelectedEc is cleared so adding a logo again auto-selects H
+    act(() => {
+      result.current.resetDesign();
+    });
+    expect(result.current.design.errorCorrection).toBe("M");
+    act(() => {
+      result.current.setLogo({
+        source: sampleDataUri,
+        fileName: "logo3.png",
+        size: 0.22,
+        margin: 4,
+        shape: "square",
+      });
+    });
+    expect(result.current.design.errorCorrection).toBe("H");
+  });
+
+  it("handles StrictMode mount/unmount/remount, out-of-order async render A/B completion, and rapid updates without race damage", async () => {
+    const container = document.createElement("div");
+    const classicDesign = getDesignPresetById("classic-black")!.design;
+    const sunsetDesign = getDesignPresetById("sunset")!.design;
+
+    // Case 1: Renderer A starts an async render, is destroyed on unmount, Renderer B mounts on the same container
+    // and finishes first, and then Renderer A's delayed promise resolves afterwards.
+    // Renderer A must NOT clear or damage Renderer B's DOM output!
+    const rendererA = createQRRenderer();
+    await rendererA.mount(container);
+    await rendererA.update("https://openqr.studio/init-a", classicDesign);
+
+    let resolveSlowRenderA!: () => void;
+    const slowPromiseA = new Promise<void>((res) => {
+      resolveSlowRenderA = res;
+    });
+    let notifyEnteredSlowRenderA!: () => void;
+    const enteredSlowRenderA = new Promise<void>((res) => {
+      notifyEnteredSlowRenderA = res;
+    });
+
+    // Inject a delayed _svgDrawingPromise on rendererA's internal instance for Render A2
+    const internalA = (
+      rendererA as unknown as {
+        instance: { update: (o: unknown) => void; _svgDrawingPromise?: Promise<void> };
+      }
+    ).instance;
+    const origUpdateA = internalA.update.bind(internalA);
+    internalA.update = (opts: unknown) => {
+      origUpdateA(opts);
+      internalA._svgDrawingPromise = slowPromiseA;
+      notifyEnteredSlowRenderA();
+    };
+
+    const pendingSlowUpdateA = rendererA.update("https://openqr.studio/slow-a", {
+      ...classicDesign,
+      dots: { style: "square", color: "#DC2626" },
+    });
+
+    // Wait until rendererA is genuinely suspended inside await _svgDrawingPromise
+    await enteredSlowRenderA;
+
+    // Unmount rendererA and immediately mount rendererB on the same shared container
+    rendererA.destroy();
+
+    const rendererB = createQRRenderer();
+    await rendererB.mount(container);
+    await rendererB.update("https://openqr.studio/fast-b", {
+      ...classicDesign,
+      dots: { style: "rounded", color: "#16A34A" },
+    });
+
+    expect(container.querySelectorAll("svg").length).toBe(1);
+    expect(container.innerHTML.toLowerCase()).toContain("#16a34a");
+
+    // Now allow Renderer A's slow promise to finish AFTER Renderer B is already displayed
+    resolveSlowRenderA();
+    await pendingSlowUpdateA;
+
+    // Invariant: Destroyed/stale Renderer A must NOT clear or overwrite Renderer B's output!
+    expect(container.querySelectorAll("svg").length).toBe(1);
+    expect(container.innerHTML.toLowerCase()).toContain("#16a34a");
+
+    // Case 2: On the same active renderer (rendererB), start Render A (slow), start Render B before A finishes,
+    // allow B to finish first, confirm B is displayed, then allow A to finish afterwards and confirm B is untouched.
+    let resolveInFlightA!: () => void;
+    const inFlightPromiseA = new Promise<void>((res) => {
+      resolveInFlightA = res;
+    });
+    let notifyEnteredInFlightA!: () => void;
+    const enteredInFlightA = new Promise<void>((res) => {
+      notifyEnteredInFlightA = res;
+    });
+    const internalB = (
+      rendererB as unknown as {
+        instance: { update: (o: unknown) => void; _svgDrawingPromise?: Promise<void> };
+      }
+    ).instance;
+    const origUpdateB = internalB.update.bind(internalB);
+    let interceptNextOnly = true;
+    internalB.update = (opts: unknown) => {
+      origUpdateB(opts);
+      if (interceptNextOnly) {
+        interceptNextOnly = false;
+        internalB._svgDrawingPromise = inFlightPromiseA;
+        notifyEnteredInFlightA();
+      }
+    };
+
+    // 1. Start render A (slow) and wait until it is suspended at await _svgDrawingPromise
+    const renderAPromise = rendererB.update("https://openqr.studio/seq-a", {
+      ...classicDesign,
+      dots: { style: "square", color: "#9333EA" },
+    });
+    await enteredInFlightA;
+
+    // 2. Start render B before A finishes & 3. Allow B to finish first
+    await rendererB.update("https://openqr.studio/seq-b", {
+      ...classicDesign,
+      dots: { style: "dots", color: "#2563EB" },
+    });
+
+    // 4. Confirm B is displayed
+    expect(container.querySelectorAll("svg").length).toBe(1);
+    expect(container.innerHTML.toLowerCase()).toContain("#2563eb");
+
+    // 5. Allow A to finish afterwards
+    resolveInFlightA();
+    await renderAPromise;
+
+    // 6. Confirm A cannot clear, replace, or damage B
+    expect(container.querySelectorAll("svg").length).toBe(1);
+    expect(container.innerHTML.toLowerCase()).toContain("#2563eb");
+    expect(container.innerHTML.toLowerCase()).not.toContain("#9333ea");
+
+    // Rapid batch updates
+    const rapidPromises = [
+      rendererB.update("https://openqr.studio/1", classicDesign),
+      rendererB.update("https://openqr.studio/2", sunsetDesign),
+      rendererB.update("https://openqr.studio/final", classicDesign),
+    ];
+    await Promise.all(rapidPromises);
+
+    expect(container.querySelectorAll("svg").length).toBe(1);
+    expect(container.querySelectorAll("canvas").length).toBe(0);
+
+    rendererB.destroy();
+    expect(container.childElementCount).toBe(0);
+  });
 });

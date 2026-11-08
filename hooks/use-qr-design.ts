@@ -22,6 +22,8 @@ export function useQrDesign(initialDesign: QRDesign = createDefaultDesign()) {
   const [activePresetId, setActivePresetId] = React.useState<string | null>(
     "classic-black"
   );
+  const [hasUserSelectedEc, setHasUserSelectedEc] = React.useState(false);
+  const hasUserSelectedEcRef = React.useRef(false);
 
   const setDesign = React.useCallback(
     (updater: QRDesign | ((prev: QRDesign) => QRDesign)) => {
@@ -189,10 +191,15 @@ export function useQrDesign(initialDesign: QRDesign = createDefaultDesign()) {
   }, []);
 
   const setLogo = React.useCallback((logo: QRLogoConfig) => {
-    setDesignState((prev) => ({
-      ...prev,
-      logo,
-    }));
+    setDesignState((prev) => {
+      const shouldAutoSelectEcH =
+        !hasUserSelectedEcRef.current && !prev.logo;
+      return {
+        ...prev,
+        ...(shouldAutoSelectEcH ? { errorCorrection: "H" as const } : {}),
+        logo,
+      };
+    });
   }, []);
 
   const updateLogo = React.useCallback((partial: Partial<QRLogoConfig>) => {
@@ -263,6 +270,8 @@ export function useQrDesign(initialDesign: QRDesign = createDefaultDesign()) {
 
   const setErrorCorrection = React.useCallback(
     (errorCorrection: ErrorCorrectionLevel) => {
+      hasUserSelectedEcRef.current = true;
+      setHasUserSelectedEc(true);
       setDesignState((prev) => ({
         ...prev,
         errorCorrection,
@@ -291,6 +300,8 @@ export function useQrDesign(initialDesign: QRDesign = createDefaultDesign()) {
   }, []);
 
   const resetDesign = React.useCallback(() => {
+    hasUserSelectedEcRef.current = false;
+    setHasUserSelectedEc(false);
     setActivePresetId("classic-black");
     setDesignState(createDefaultDesign());
   }, []);
@@ -298,6 +309,7 @@ export function useQrDesign(initialDesign: QRDesign = createDefaultDesign()) {
   return {
     design,
     activePresetId,
+    hasUserSelectedEc,
     setDesign,
     setDotStyle,
     setDotsColor,
